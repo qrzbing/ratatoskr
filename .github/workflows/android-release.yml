@@ -52,7 +52,6 @@ jobs:
         env:
           BUILD_TOOLS_VERSION: "34.0.0"
 
-        
       # 4. 重命名 APK (格式: arm64v8_ratatoskr_{version}.apk)
       - name: Rename APK
         id: rename_apk
@@ -67,6 +66,25 @@ jobs:
           # 将新路径输出给下一步使用
           echo "apk_path=$TARGET_NAME" >> $GITHUB_OUTPUT
 
+      - name: Generate Release Body
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 调用 GitHub API 获取自动生成的更新日志 (What's Changed...)
+          # 这里的 tag_name 使用我们将要发布的版本号
+          AUTO_NOTES=$(gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            /repos/${{ github.repository }}/releases/generate-notes \
+            -f tag_name="v${{ env.VERSION_NAME }}" \
+            -f target_commitish="release" \
+            --jq .body)
+          
+          echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
+          echo "" >> $GITHUB_ENV
+          echo "$AUTO_NOTES" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
       # 5. 创建 GitHub Release 并上传
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -74,7 +92,7 @@ jobs:
         with:
           tag_name: v${{ env.VERSION_NAME }}
           name: Release v${{ env.VERSION_NAME }}
-          body: "Auto-generated release from branch 'release'."
+          body: ${{ env.RELEASE_BODY }}
           files: ${{ steps.rename_apk.outputs.apk_path }}
           draft: false
           prerelease: false
